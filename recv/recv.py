@@ -1,3 +1,7 @@
+# Copyright (C) 2023 Andrey Zhukov
+#
+# This file is part of the vis-transfer project, distributed under the GNU GPL version 3.
+# For full terms see https://github.com/andreasxp/vis-transfer/blob/master/LICENSE.txt.
 import base64
 import hashlib
 import json

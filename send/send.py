@@ -7,7 +7,6 @@ import hashlib
 import io
 import json
 import sys
-from threading import Thread
 import os
 from time import sleep
 import math

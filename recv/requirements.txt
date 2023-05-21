@@ -1,3 +1,4 @@
 opencv-python
 PySide6
-qreader
+numpy
+qrdet

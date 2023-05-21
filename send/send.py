@@ -2,58 +2,41 @@
 #
 # This file is part of the vis-transfer project, distributed under the GNU GPL version 3.
 # For full terms see https://github.com/andreasxp/vis-transfer/blob/master/LICENSE.txt.
-import base64
 import hashlib
-import io
 import json
 import sys
 import os
-from time import sleep
 import math
 
-import pyqrcode
+from qrcode import QRCode, constants
+from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QApplication, QLabel, QFileDialog, QVBoxLayout, QWidget, QHBoxLayout, QProgressBar
+from PySide6.QtWidgets import QApplication, QLabel, QFileDialog, QVBoxLayout, QWidget, QHBoxLayout, QProgressBar, QPushButton, QStackedWidget
 
 
-def qr(data):
-    qr = pyqrcode.create(
-        data, error="H", version=20, mode="binary", encoding="unicode_escape"
-    )
-    buffer = io.BytesIO()
-    qr.png(buffer, scale=9)
+def qr20(data):
+    data = (data[0*382:1*382], data[1*382:2*382], data[2*382:3*382])
 
-    return QPixmap(QImage.fromData(buffer.getvalue()))
+    qrcodes = [None] * 3
+    for i in range(3):
+        qrcode = QRCode(
+            version=20,
+            error_correction=constants.ERROR_CORRECT_H,
+            box_size=9,
+            border=4
+        )
+        qrcode.add_data(data[i])
+        qrcode_image = qrcode.make_image(fill_color="black", back_color="white")
 
+        qrcodes[i] = qrcode_image.convert("L")
 
-def pil_to_qt(img):
-    return QPixmap(ImageQt(img))
-
-
-def generate_qrs(label, data):
-    payload = base64.b85encode(data).decode()
-
-    m = hashlib.sha256()
-    m.update(data)
-
-    packet0 = json.dumps({"len": len(payload), "sha": m.hexdigest()})
-    label.setPixmap(qr(packet0))
-
-    step = 382 - 10
-    i = 0
-    while i * step < len(payload):
-        slice = payload[i * step : min(len(payload), (i + 1) * step)]
-
-        packet = f"{i: 10}" + slice
-
-        label.setPixmap(qr(packet))
-        sleep(1)
-        i += 1
+    dense_qrcode = Image.merge("RGB", qrcodes)
+    return QPixmap(ImageQt(dense_qrcode))
 
 class SendWindow(QWidget):
-    blockSize = 382 - 10  # -10 for the block index at the beginning
+    blockSize = 382*3 - 10  # -10 for the block index at the beginning
 
     def __init__(self):
         super().__init__()
@@ -70,22 +53,49 @@ class SendWindow(QWidget):
         self.wProgressBar = QProgressBar()
         self.wBlockCount = QLabel()
 
+        wInstructions = QLabel("Start your recording then press the start button.")
+        self.wStartButton = QPushButton("Start")
+
+        self.wStack = QStackedWidget()
+        self.wStack.setContentsMargins(0, 0, 0, 0)
+
+        lyStack1 = QHBoxLayout()
+        lyStack1.addWidget(wInstructions)
+        lyStack1.addWidget(self.wStartButton)
+
+        lyStack2 = QHBoxLayout()
+        lyStack2.addWidget(self.wBlockCount)
+        lyStack2.addWidget(self.wProgressBar)
+
+        wStack1 = QWidget()
+        wStack1.setContentsMargins(0, 0, 0, 0)
+        lyStack1.setContentsMargins(0, 0, 0, 0)
+        wStack1.setLayout(lyStack1)
+
+        wStack2 = QWidget()
+        wStack2.setContentsMargins(0, 0, 0, 0)
+        lyStack2.setContentsMargins(0, 0, 0, 0)
+        wStack2.setLayout(lyStack2)
+
+        self.wStack.addWidget(wStack1)
+        self.wStack.addWidget(wStack2)
+        self.wStack.setCurrentIndex(0)
+
         lyStatusLine = QHBoxLayout()
         lyStatusLine.addStretch()
-        lyStatusLine.addWidget(self.wBlockCount)
-        lyStatusLine.addWidget(self.wProgressBar)
+        lyStatusLine.addWidget(self.wStack)
         lyStatusLine.addStretch()
 
         ly.addWidget(self.wQrCode)
         ly.addLayout(lyStatusLine)
 
         self._nextBlock = 0
-        self.data = None
+        self._data = None
 
+        self.wStartButton.clicked.connect(self.startTransfer)
         self._timer = QTimer()
         self._timer.setInterval(1000)
         self._timer.timeout.connect(self._showNextBlock)
-        self._payload = None
         self._blockCount = None
 
     @property
@@ -96,20 +106,27 @@ class SendWindow(QWidget):
     def delay(self, value):
         self._timer.setInterval(math.ceil(value * 1000))
 
-    def startTransfer(self):
-        if self.data is None:
-            raise RuntimeError("Cannot transfer: set .data property first")
+    @property
+    def data(self):
+        return self._data
 
-        self._payload = base64.b85encode(self.data).decode()
-        self._blockCount = math.ceil(len(self._payload) / self.blockSize)
+    @data.setter
+    def data(self, value):
+        self._data = value
+        self._blockCount = math.ceil(len(self._data) / self.blockSize)
         self.wProgressBar.setRange(0, self._blockCount)
 
         m = hashlib.sha256()
-        m.update(self.data)
+        m.update(self._data)
 
-        header_block = json.dumps({"len": len(self._payload), "sha": m.hexdigest()})
-        self.wQrCode.setPixmap(qr(header_block))
+        header_block = json.dumps({"len": len(self._data), "sha": m.hexdigest()}).encode("ascii")
+        self.wQrCode.setPixmap(qr20(header_block))
 
+    def startTransfer(self):
+        if self._data is None:
+            raise RuntimeError("Cannot transfer: set .data property first")
+
+        self.wStack.setCurrentIndex(1)
         self._nextBlock = 0
         self._timer.start()
 
@@ -117,12 +134,12 @@ class SendWindow(QWidget):
         self._timer.stop()
 
         beginChar = self._nextBlock * self.blockSize
-        endChar = min((self._nextBlock + 1) * self.blockSize, len(self._payload))
+        endChar = min((self._nextBlock + 1) * self.blockSize, len(self._data))
 
-        block = self._payload[beginChar:endChar]
-        packet = f"{self._nextBlock: 10}" + block
+        block = self._data[beginChar:endChar]
+        packet = f"{self._nextBlock: 10}".encode("ascii") + block
 
-        self.wQrCode.setPixmap(qr(packet))
+        self.wQrCode.setPixmap(qr20(packet))
         self.wProgressBar.setValue(self._nextBlock + 1)
         self.wBlockCount.setText(f"{self._nextBlock+1}/{self._blockCount}")
 
@@ -140,8 +157,6 @@ def main():
         data = f.read()
     w.data = data
     w.delay = 1/15
-
-    QTimer.singleShot(0, w.startTransfer)
 
     w.showMaximized()
     return app.exec()

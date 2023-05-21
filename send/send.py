@@ -14,6 +14,7 @@ from PIL.ImageQt import ImageQt
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import QApplication, QLabel, QFileDialog, QVBoxLayout, QWidget, QHBoxLayout, QProgressBar, QPushButton, QStackedWidget
+from time import time
 
 
 def qr20(data):
@@ -97,6 +98,7 @@ class SendWindow(QWidget):
         self._timer.setInterval(1000)
         self._timer.timeout.connect(self._showNextBlock)
         self._blockCount = None
+        self._next_qr = None
 
     @property
     def delay(self):
@@ -129,23 +131,29 @@ class SendWindow(QWidget):
         self.wStack.setCurrentIndex(1)
         self._nextBlock = 0
         self._timer.start()
+        self._next_qr = self.getNextQrCode()
 
-    def _showNextBlock(self):
-        self._timer.stop()
-
+    def getNextQrCode(self):
         beginChar = self._nextBlock * self.blockSize
         endChar = min((self._nextBlock + 1) * self.blockSize, len(self._data))
 
         block = self._data[beginChar:endChar]
         packet = f"{self._nextBlock: 10}".encode("ascii") + block
 
-        self.wQrCode.setPixmap(qr20(packet))
+        return qr20(packet)
+
+    def _showNextBlock(self):
+        self.wQrCode.setPixmap(self._next_qr)
         self.wProgressBar.setValue(self._nextBlock + 1)
         self.wBlockCount.setText(f"{self._nextBlock+1}/{self._blockCount}")
 
         self._nextBlock += 1
-        if self._nextBlock != self._blockCount:
-            self._timer.start()
+        if self._nextBlock == self._blockCount:
+            self._timer.stop()
+            return
+
+        self._next_qr = self.getNextQrCode()
+
 
 
 def main():

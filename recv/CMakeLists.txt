@@ -16,6 +16,7 @@ target_link_libraries(application PRIVATE llfio::dl)
 find_package(cryptopp CONFIG REQUIRED)
 target_link_libraries(application PRIVATE cryptopp::cryptopp)
 
+include(InstallRequiredSystemLibraries)
 install(TARGETS application)
 install(IMPORTED_RUNTIME_ARTIFACTS application RUNTIME_DEPENDENCY_SET application_RUNTIME_DEPENDENCY_SET)
 set(system32_regex "^$ENV{SystemRoot}\\system32")

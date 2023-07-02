@@ -1,4 +1,7 @@
-# Visual File Trasfer
+<p align="center">
+	<img height=160 src="assets/logo.svg" alt="Visual File Transfer">
+</p>
+
 This repository is a proof-of-concept method of transferring files in and out of secure systems and networks by displaying them as a series of QR codes, which can then be recorded and decoded on another computer.
 
 For usage, see the respective README files in `send` and `recv` directories.

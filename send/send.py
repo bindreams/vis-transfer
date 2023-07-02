@@ -1,24 +1,34 @@
 # Copyright (C) 2023 Andrey Zhukov
 #
 # This file is part of the vis-transfer project, distributed under the GNU GPL version 3.
-# For full terms see https://github.com/andreasxp/vis-transfer/blob/master/LICENSE.txt.
+# For full terms see https://github.com/andreasxp/vis-transfer/blob/master/LICENSE.md.
 import hashlib
-import json
 import sys
 import os
 import math
+import struct
 
 from qrcode import QRCode, constants
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QApplication, QLabel, QFileDialog, QVBoxLayout, QWidget, QHBoxLayout, QProgressBar, QPushButton, QStackedWidget
-from time import time
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (
+    QApplication, QLabel, QFileDialog, QVBoxLayout, QWidget, QHBoxLayout, QProgressBar, QPushButton, QStackedWidget
+)
 
+LAYER_SIZE = 382
+PACKET_SIZE = LAYER_SIZE * 3
+BLOCK_SIZE = PACKET_SIZE - 8  # -8 for the block index at the beginning
+HEADER_PACKET_INDEX = 0xFFFFFFFFFFFFFFFF  # max uint64
 
 def qr20(data):
-    data = (data[0*382:1*382], data[1*382:2*382], data[2*382:3*382])
+    assert len(data) <= PACKET_SIZE
+    data = (
+        data[0*LAYER_SIZE:1*LAYER_SIZE],
+        data[1*LAYER_SIZE:2*LAYER_SIZE],
+        data[2*LAYER_SIZE:3*LAYER_SIZE],
+    )
 
     qrcodes = [None] * 3
     for i in range(3):
@@ -37,8 +47,6 @@ def qr20(data):
     return QPixmap(ImageQt(dense_qrcode))
 
 class SendWindow(QWidget):
-    blockSize = 382*3 - 10  # -10 for the block index at the beginning
-
     def __init__(self):
         super().__init__()
 
@@ -115,14 +123,21 @@ class SendWindow(QWidget):
     @data.setter
     def data(self, value):
         self._data = value
-        self._blockCount = math.ceil(len(self._data) / self.blockSize)
+        self._blockCount = math.ceil(len(self._data) / BLOCK_SIZE)
         self.wProgressBar.setRange(0, self._blockCount)
 
-        m = hashlib.sha256()
+        m = hashlib.sha3_256()
         m.update(self._data)
 
-        header_block = json.dumps({"len": len(self._data), "sha": m.hexdigest()}).encode("ascii")
-        self.wQrCode.setPixmap(qr20(header_block))
+        header_packet = struct.pack(">QHQH32s",
+            HEADER_PACKET_INDEX, # packet index
+            1, # protocol version
+            len(self._data),  # file size
+            382*3,  # packet size
+            m.digest()  # sha3-256 of file
+        )
+
+        self.wQrCode.setPixmap(qr20(header_packet))
 
     def startTransfer(self):
         if self._data is None:
@@ -134,11 +149,11 @@ class SendWindow(QWidget):
         self._next_qr = self.getNextQrCode()
 
     def getNextQrCode(self):
-        beginChar = self._nextBlock * self.blockSize
-        endChar = min((self._nextBlock + 1) * self.blockSize, len(self._data))
+        beginChar = self._nextBlock * BLOCK_SIZE
+        endChar = min((self._nextBlock + 1) * BLOCK_SIZE, len(self._data))
 
         block = self._data[beginChar:endChar]
-        packet = f"{self._nextBlock: 10}".encode("ascii") + block
+        packet = struct.pack(">Q", self._nextBlock) + block
 
         return qr20(packet)
 

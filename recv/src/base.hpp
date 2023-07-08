@@ -20,7 +20,7 @@ struct ParseError : VisTransferError {
 	using VisTransferError::VisTransferError;
 };
 
-using DecodeResult = std::expected<std::vector<uint8_t>, DecodeError>;
+using DecodeResult = std::expected<std::vector<std::vector<uint8_t>>, DecodeError>;
 
 template<class F>
 concept Decoder = requires(F&& f, const cv::Mat& image) {
@@ -49,13 +49,14 @@ decltype(auto) combine(F&& f, Fs&&... fs) {
 	}
 }
 
+constexpr const int PacketIndexSize = 6;
 uint64_t packet_index(std::span<const uint8_t> bytes) {
-	if (bytes.size() < 8) {
+	if (bytes.size() < PacketIndexSize) {
 		throw std::runtime_error(std::format("not enough bytes ({}) to read packet index", bytes.size()));
 	}
 
 	uint64_t result = 0;
-	for (int i = 0; i < 8; ++i) {
+	for (int i = 0; i < 6; ++i) {
 		result <<= 8;
 		result += bytes[i];
 	}

@@ -32,37 +32,23 @@ inline ZXing::ImageView ImageViewFromMat(const cv::Mat& image) {
 	return {image.data, image.cols, image.rows, format};
 }
 
-inline ZXing::Results ReadQRCode(const cv::Mat& image) {
-	ZXing::DecodeHints hints;
-	hints.setFormats(ZXing::BarcodeFormat::QRCode);
-
-	return ZXing::ReadBarcodes(ImageViewFromMat(image), hints);
-}
-
-inline void DrawResult(cv::Mat& img, ZXing::Result res) {
-	auto pos = res.position();
-	auto zx2cv = [](ZXing::PointI p) { return cv::Point(p.x, p.y); };
-	auto contour = std::vector<cv::Point>{zx2cv(pos[0]), zx2cv(pos[1]), zx2cv(pos[2]), zx2cv(pos[3])};
-	const auto* pts = contour.data();
-	int npts = contour.size();
-
-	cv::polylines(img, &pts, &npts, 1, true, CV_RGB(0, 255, 0));
-	cv::putText(img, res.text(), zx2cv(pos[3]) + cv::Point(0, 20), cv::FONT_HERSHEY_DUPLEX, 0.5, CV_RGB(0, 255, 0));
-}
-
 }  // namespace detail
 
 DecodeResult read(const cv::Mat& image) {
 	using detail::ImageViewFromMat;
 
 	ZXing::DecodeHints hints;
-	hints.setFormats(ZXing::BarcodeFormat::QRCode);
+	hints.setFormats(ZXing::BarcodeFormat::DataMatrix);
 
 	auto read_result = ZXing::ReadBarcodes(ImageViewFromMat(image), hints);
-	if (read_result.size() > 1) return std::unexpected{DecodeError("more than one QR code detected")};
-	if (read_result.size() == 1) return read_result[0].bytes();
+	if (read_result.size() == 0) std::unexpected{DecodeError("no symbol detected")};
 
-	return std::unexpected{DecodeError("no QR code detected")};
+	std::vector<std::vector<uint8_t>> result;
+	for (auto& symbol : read_result) {
+		result.push_back(std::move(symbol.bytes()));
+	}
+
+	return result;
 }
 
 DecodeResult read_blur3(cv::Mat image) {

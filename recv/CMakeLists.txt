@@ -15,6 +15,8 @@ find_package(llfio CONFIG REQUIRED)
 target_link_libraries(application PRIVATE llfio::dl)
 find_package(cryptopp CONFIG REQUIRED)
 target_link_libraries(application PRIVATE cryptopp::cryptopp)
+find_package(fmt CONFIG REQUIRED)
+target_link_libraries(application PRIVATE fmt::fmt)
 
 include(InstallRequiredSystemLibraries)
 install(TARGETS application)

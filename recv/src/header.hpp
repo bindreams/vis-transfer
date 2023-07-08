@@ -13,21 +13,21 @@
 #include "base.hpp"
 #include "repr.hpp"
 
-template<std::unsigned_integral T>
+template<std::integral T, size_t ByteSize = sizeof(T)>
 size_t read(std::span<const uint8_t> bytes, size_t index, T& value) {
-	if (index + sizeof(T) > bytes.size()) throw std::runtime_error("end of data reached");
+	if (index + ByteSize > bytes.size()) throw std::runtime_error("end of data reached");
 
 	value = 0;
-	for (int i = index; i < index + sizeof(T); ++i) {
-		if constexpr (sizeof(T) > 1) value <<= 8;
+	for (int i = index; i < index + ByteSize; ++i) {
+		if constexpr (ByteSize > 1) value <<= 8;
 		value += bytes[i];
 	}
 
-	return index + sizeof(T);
+	return index + ByteSize;
 }
 
 template<std::ranges::sized_range Range>
-	requires std::unsigned_integral<std::ranges::range_value_t<Range>>
+	requires std::integral<std::ranges::range_value_t<Range>>
 size_t read(std::span<const uint8_t> bytes, size_t index, Range& arr) {
 	if (index + arr.size() * sizeof(std::ranges::range_value_t<Range>) > bytes.size())
 		throw std::runtime_error("end of data reached");
@@ -43,15 +43,14 @@ size_t read(std::span<const uint8_t> bytes, size_t index, Range& arr) {
  * @brief Header packet structure.
  *
  * Header packet is a sequence of bytes in this order:
- * packet index (always 0) : 8B
+ * packet index (fixed)    : 6B
  * version                 : 2B
  * file size               : 8B
  * packet size             : 2B
  * sha3-256 hash of file   : 32B
  */
 struct StreamHeader {
-	static constexpr uint64_t StaticPacketIndex = std::numeric_limits<uint64_t>::max();
-	// static constexpr uint64_t StaticPacketIndex = 0;
+	static constexpr uint64_t StaticPacketIndex = 0xFFFFFFFFFFFF;
 	uint16_t version = 0;
 	uint64_t file_size = 0;
 	uint16_t packet_size = 0;
@@ -62,7 +61,7 @@ struct StreamHeader {
 		size_t i = 0;
 
 		uint64_t packet_index = 0;
-		i = read(bytes, i, packet_index);
+		i = read<uint64_t, PacketIndexSize>(bytes, i, packet_index);
 		if (packet_index != StaticPacketIndex) {
 			return std::unexpected<ParseError>(
 				std::format("packet index is {} (should be {})", packet_index, StaticPacketIndex)
@@ -70,7 +69,7 @@ struct StreamHeader {
 		}
 
 		i = read(bytes, i, header.version);
-		if (header.version != 1) {
+		if (header.version != 2) {
 			return std::unexpected<ParseError>(std::format("unknown protocol version: {}", header.version));
 		}
 

@@ -3,6 +3,7 @@
 		{"name": "opencv", "features": ["cuda","cudnn","eigen","jpeg","png","ffmpeg","contrib"]},
 		"nu-book-zxing-cpp",
 		"llfio",
-		"cryptopp"
+		"cryptopp",
+		"fmt"
 	]
 }

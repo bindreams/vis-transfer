@@ -2,11 +2,12 @@
 ///
 /// This file is part of the vis-transfer project, distributed under the GNU GPL version 3.
 /// For full terms see https://github.com/andreasxp/vis-transfer/blob/master/LICENSE.md.
+#include <fmt/format.h>
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <stdexcept>
+#include "ddm.hpp"
 #include "deps/CLI11.hpp"
-#include "dqr.hpp"
 #include "header.hpp"
 #include "memfile.hpp"
 #include "util.hpp"
@@ -89,8 +90,20 @@ std::string header_progress(ch::steady_clock::time_point start_time, uint64_t if
 
 }  // namespace report
 
-void receive(const std::filesystem::path& input, const std::filesystem::path& output) {
+template<typename E = std::runtime_error, typename... Args>
+E except(std::format_string<Args...> fmt, Args&&... args) {
+	return E(std::format(fmt, std::forward<Args>(args)...));
+};
+
+void receive(const std::filesystem::path& input, const std::filesystem::path& output, int verbosity) {
 	auto read = combine(readers::zxing::read, readers::zxing::read_blur3);
+	auto log_progress = [verbosity](std::string_view str) {
+		if (verbosity > 0) {
+			fmt::print("{}\n", str);
+		} else {
+			fmt::print("\r{}", str);
+		}
+	};
 
 	cv::VideoCapture stream(input.string());
 	cv::Mat frame;
@@ -100,79 +113,113 @@ void receive(const std::filesystem::path& input, const std::filesystem::path& ou
 	auto start_time = ch::steady_clock::now();
 
 	for (;; ++iframe) {
-		if (!stream.read(frame)) {
-			throw std::runtime_error(std::format("failed to find a header: reached end of file"));
-		}
-		std::cout << "\r" << report::header_progress(start_time, iframe, nframes);
+		if (iframe >= nframes) throw except("failed to find a header: reached end of file");
+		log_progress(report::header_progress(start_time, iframe, nframes));
 
-		auto packet = read_dqr(frame, read);
-		if (!packet) continue;
+		if (!stream.read(frame)) throw except("failed to find a header: read error");
+
+		auto packet = read_ddm(frame, read);
+		if (!packet) {
+			if (verbosity >= 1) {
+				fmt::print(
+					stderr,
+					"failed to decode frame at layer {}: {}\n",
+					packet.error().first,
+					packet.error().second.what()
+				);
+			}
+			continue;
+		}
+		if (verbosity >= 2) fmt::print(stderr, "contents: {}\n", repr(*packet));
 
 		if (packet_index(*packet) != StreamHeader::StaticPacketIndex) {
-			throw std::runtime_error(std::format("failed to find a header: found packet {}", packet_index(*packet)));
+			throw except("failed to find a header: found packet {}", packet_index(*packet));
 		}
 
 		header = unwrap(StreamHeader::fromBytes(*packet));
 		break;
 	}
 
-	uint64_t metadata_size = 8;
+	if (verbosity >= 1) fmt::print(stderr, "found header:\n{}\n", repr(1, header));
+
+	uint64_t metadata_size = PacketIndexSize;
 	uint64_t block_size = header.packet_size - metadata_size;
 	uint64_t npackets = std::ceil(double(header.file_size) / block_size);
 	uint64_t ipacket_next = 0;
+
+	if (verbosity >= 1)
+		fmt::print(
+			stderr,
+			"computed additional info:\n"
+			"  metadata_size: {}\n"
+			"  block_size: {}\n"
+			"  npackets: {}\n",
+			metadata_size,
+			block_size,
+			npackets
+		);
 
 	std::filesystem::path output_temp = output;
 	output_temp += ".vis-transfer-incomplete";
 	ScopeGuard sg([&] { std::filesystem::remove(output_temp); });
 	memfile mf(output_temp, header.file_size);
 
-	for (;; ++iframe) {
-		if (!stream.read(frame)) {
-			throw std::runtime_error(std::format("failed to find packet {}: reached end of file", ipacket_next));
-		}
-		std::cout << "\r" << report::progress(start_time, iframe, nframes, ipacket_next, npackets);
+	for (; iframe < nframes; ++iframe) {
+		if (iframe >= nframes) throw except("failed to find packet {}: reached end of file", ipacket_next);
+		log_progress(report::progress(start_time, iframe, nframes, ipacket_next, npackets));
 
-		auto packet = read_dqr(frame, read);
-		if (!packet) continue;
+		if (!stream.read(frame)) throw except("failed to find packet {}: read error", ipacket_next);
+
+		auto packet = read_ddm(frame, read);
+		if (!packet) {
+			if (verbosity >= 1) {
+				fmt::print(
+					stderr,
+					"failed to decode frame at layer {}: {}\n",
+					packet.error().first,
+					packet.error().second.what()
+				);
+			}
+			continue;
+		}
+		if (verbosity >= 2) fmt::print(stderr, "contents: {}\n", repr(*packet));
+
 		uint64_t ipacket = packet_index(*packet);
 
-		if (ipacket < ipacket_next || ipacket == StreamHeader::StaticPacketIndex) continue;  // Already decoded
+		if (ipacket < ipacket_next || ipacket == StreamHeader::StaticPacketIndex) {
+			if (verbosity >= 1) fmt::print(stderr, "packet already decoded\n");
+			continue;
+		}
 		if (ipacket > ipacket_next) {
-			throw std::runtime_error(
-				std::format("failed to find packet {}: found packet {} instead", ipacket_next, ipacket)
-			);
+			throw except("failed to find packet {}: found packet {} instead", ipacket_next, ipacket);
 		}
 
 		uint64_t write_index = ipacket * block_size;
-		if (packet->size() < header.packet_size) {
-			uint16_t expected_packet_size =
-				ipacket == npackets - 1 ? (header.file_size - write_index + metadata_size) : header.packet_size;
+		uint16_t expected_packet_size =
+			ipacket == npackets - 1 ? (header.file_size - write_index + metadata_size) : header.packet_size;
 
-			if (packet->size() != expected_packet_size) {
-				throw std::runtime_error(std::format(
-					"packet {} corrupted: size is {} instead of expected {}",
-					ipacket,
-					packet->size(),
-					expected_packet_size
-				));
-			}
+		if (packet->size() != expected_packet_size) {
+			throw except(
+				"packet {} corrupted: size is {} instead of expected {}", ipacket, packet->size(), expected_packet_size
+			);
 		}
 
-		std::span<const uint8_t> block{packet->data() + 8, packet->size() - 8};
+		std::span<const uint8_t> block{packet->data() + metadata_size, packet->size() - metadata_size};
 		mf.write(write_index, block);
 		if (ipacket == npackets - 1) break;
 		++ipacket_next;
 	}
 
 	if (mf.sha3_256() != header.sha3_256) {
-		throw std::runtime_error(std::format(
+		throw except(
 			"file corrupted, hash is incorrect:\nexpected {}\n     got {}", repr(header.sha3_256), repr(mf.sha3_256())
-		));
+		);
 	}
 
 	mf.close();
-	std::cout << "\r" << report::progress(start_time, iframe, nframes, npackets, npackets) << "\n";
+	log_progress(report::progress(start_time, iframe, nframes, npackets, npackets));
 	std::filesystem::rename(output_temp, output);
+	fmt::print(stderr, "done\n");
 }
 
 int main() {
@@ -188,6 +235,7 @@ int main() {
 	app.add_option("-o,--output", output, "Output file")
 		->required()
 		->check(CLI::NonexistentPath);
+	app.add_flag("-v,--verbose", "enable verbose output");
 	// clang-format on
 
 	try {
@@ -196,9 +244,12 @@ int main() {
 		return app.exit(e);
 	}
 
+	int verbosity = app.count("-v");
+
 	try {
-		receive(input, output);
+		receive(input, output, verbosity);
 	} catch (const std::exception& e) {
-		std::cout << typeid(e).name() << ": " << e.what() << "\n";
+		std::cout << "\n" << typeid(e).name() << ": " << e.what() << "\n";
+		return 1;
 	}
 }

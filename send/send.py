@@ -7,8 +7,8 @@ import sys
 import os
 import math
 import struct
+import io
 
-from qrcode import QRCode, constants
 from PIL import Image
 from PIL.ImageQt import ImageQt
 from PySide6.QtCore import Qt, QTimer
@@ -16,39 +16,44 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QApplication, QLabel, QFileDialog, QVBoxLayout, QWidget, QHBoxLayout, QProgressBar, QPushButton, QStackedWidget
 )
+import pyzint
 
-LAYER_SIZE = 382
+def datamatrix(data, /, *, version):
+    bmp_string = pyzint.Barcode.DATAMATRIX(data, option_2=version).render_bmp()
+    return Image.open(io.BytesIO(bmp_string), formats=("BMP",)).convert("L")
+
+LAYER_SIZE = 690
 PACKET_SIZE = LAYER_SIZE * 3
-BLOCK_SIZE = PACKET_SIZE - 8  # -8 for the block index at the beginning
-HEADER_PACKET_INDEX = 0xFFFFFFFFFFFFFFFF  # max uint64
+BLOCK_SIZE = PACKET_SIZE - 6  # -6 for the block index at the beginning
+HEADER_PACKET_INDEX = 0xFFFFFFFFFFFF  # max uint48
 
-def qr20(data):
+def packet_image(data, scale=5):
+    #print("data:", repr(data))
     assert len(data) <= PACKET_SIZE
+    index = data[:6]
+    payload = data[6:]
+
     data = (
-        data[0*LAYER_SIZE:1*LAYER_SIZE],
-        data[1*LAYER_SIZE:2*LAYER_SIZE],
-        data[2*LAYER_SIZE:3*LAYER_SIZE],
+        index[0:2] + payload[0*(BLOCK_SIZE//3):1*(BLOCK_SIZE//3)],
+        index[2:4] + payload[1*(BLOCK_SIZE//3):2*(BLOCK_SIZE//3)],
+        index[4:6] + payload[2*(BLOCK_SIZE//3):3*(BLOCK_SIZE//3)],
     )
 
-    qrcodes = [None] * 3
+    subpacket_images = []
     for i in range(3):
-        qrcode = QRCode(
-            version=20,
-            error_correction=constants.ERROR_CORRECT_H,
-            box_size=9,
-            border=4
-        )
-        qrcode.add_data(data[i])
-        qrcode_image = qrcode.make_image(fill_color="black", back_color="white")
+        subpacket_images.append(datamatrix(data[i], version=20))
 
-        qrcodes[i] = qrcode_image.convert("L")
+    result = Image.merge("RGB", subpacket_images)
+    result = result.resize((result.width * scale, result.height * scale), Image.Resampling.NEAREST)
+    return QPixmap(ImageQt(result))
 
-    dense_qrcode = Image.merge("RGB", qrcodes)
-    return QPixmap(ImageQt(dense_qrcode))
+def encodeindex(index):
+    return struct.pack(">Q", index)[2:]
 
 class SendWindow(QWidget):
     def __init__(self):
         super().__init__()
+        self.setStyleSheet("background-color:white;")
 
         ly = QVBoxLayout()
         self.setLayout(ly)
@@ -56,8 +61,8 @@ class SendWindow(QWidget):
         self.setContentsMargins(0, 0, 0, 0)
         ly.setContentsMargins(0, 0, 0, 0)
 
-        self.wQrCode = QLabel()
-        self.wQrCode.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.wImage = QLabel()
+        self.wImage.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.wProgressBar = QProgressBar()
         self.wBlockCount = QLabel()
@@ -95,7 +100,9 @@ class SendWindow(QWidget):
         lyStatusLine.addWidget(self.wStack)
         lyStatusLine.addStretch()
 
-        ly.addWidget(self.wQrCode)
+        ly.addStretch()
+        ly.addWidget(self.wImage)
+        ly.addStretch()
         ly.addLayout(lyStatusLine)
 
         self._nextBlock = 0
@@ -129,15 +136,15 @@ class SendWindow(QWidget):
         m = hashlib.sha3_256()
         m.update(self._data)
 
-        header_packet = struct.pack(">QHQH32s",
-            HEADER_PACKET_INDEX, # packet index
-            1, # protocol version
+        header_packet = struct.pack(">6sHQH32s",
+            encodeindex(HEADER_PACKET_INDEX), # packet index
+            2, # protocol version
             len(self._data),  # file size
-            382*3,  # packet size
+            PACKET_SIZE,  # packet size
             m.digest()  # sha3-256 of file
         )
 
-        self.wQrCode.setPixmap(qr20(header_packet))
+        self.wImage.setPixmap(packet_image(header_packet))
 
     def startTransfer(self):
         if self._data is None:
@@ -153,12 +160,12 @@ class SendWindow(QWidget):
         endChar = min((self._nextBlock + 1) * BLOCK_SIZE, len(self._data))
 
         block = self._data[beginChar:endChar]
-        packet = struct.pack(">Q", self._nextBlock) + block
+        packet = encodeindex(self._nextBlock) + block
 
-        return qr20(packet)
+        return packet_image(packet)
 
     def _showNextBlock(self):
-        self.wQrCode.setPixmap(self._next_qr)
+        self.wImage.setPixmap(self._next_qr)
         self.wProgressBar.setValue(self._nextBlock + 1)
         self.wBlockCount.setText(f"{self._nextBlock+1}/{self._blockCount}")
 

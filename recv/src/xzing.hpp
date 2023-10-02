@@ -41,7 +41,7 @@ DecodeResult read(const cv::Mat& image) {
 	hints.setFormats(ZXing::BarcodeFormat::DataMatrix);
 
 	auto read_result = ZXing::ReadBarcodes(ImageViewFromMat(image), hints);
-	if (read_result.size() == 0) std::unexpected{DecodeError("no symbol detected")};
+	if (read_result.size() == 0) return std::unexpected{DecodeError("no symbol detected")};
 
 	std::vector<std::vector<uint8_t>> result;
 	for (auto& symbol : read_result) {

@@ -14,7 +14,7 @@ from PIL.ImageQt import ImageQt
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QApplication, QLabel, QFileDialog, QVBoxLayout, QWidget, QHBoxLayout, QProgressBar, QPushButton, QStackedWidget
+    QApplication, QLabel, QFileDialog, QVBoxLayout, QWidget, QHBoxLayout, QProgressBar, QPushButton, QStackedWidget, QSizePolicy
 )
 import pyzint
 
@@ -30,7 +30,7 @@ BLOCK_SIZE = PACKET_SIZE - 6  # -6 for the block index at the beginning
 HEADER_PACKET_INDEX = 0xFFFFFFFFFFFF  # max uint48
 
 
-def packet_image(data, scale=5):
+def packet_image(data, size: int):
     #print("data:", repr(data))
     assert len(data) <= PACKET_SIZE
     index = data[:6]
@@ -47,13 +47,12 @@ def packet_image(data, scale=5):
         subpacket_images.append(datamatrix(data[i], version=20))
 
     result = Image.merge("RGB", subpacket_images)
-    result = result.resize((result.width * scale, result.height * scale), Image.Resampling.NEAREST)
+    result = result.resize((size, size), Image.Resampling.NEAREST)
     return QPixmap(ImageQt(result))
 
 
 def encodeindex(index):
     return struct.pack(">Q", index)[2:]
-
 
 class SendWindow(QWidget):
     def __init__(self):
@@ -67,6 +66,8 @@ class SendWindow(QWidget):
         ly.setContentsMargins(0, 0, 0, 0)
 
         self.wImage = QLabel()
+        self.wImage.setMinimumSize(96, 96)
+        self.wImage.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         self.wImage.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.wProgressBar = QProgressBar()
@@ -105,10 +106,10 @@ class SendWindow(QWidget):
         lyStatusLine.addWidget(self.wStack)
         lyStatusLine.addStretch()
 
-        ly.addStretch()
         ly.addWidget(self.wImage)
-        ly.addStretch()
         ly.addLayout(lyStatusLine)
+        ly.setStretchFactor(self.wImage, 1)
+        ly.setStretchFactor(lyStatusLine, 0)
 
         self._nextBlock = 0
         self._data = None
@@ -136,6 +137,28 @@ class SendWindow(QWidget):
     def rate(self, value):
         self.delay = 1 / value
 
+    def max_symbol_size(self):
+        print(self.wImage.width(), self.wImage.height())
+        return min(self.wImage.width(), self.wImage.height())
+
+    def render(self, packet):
+        return packet_image(packet, self.max_symbol_size())
+
+    def header_packet(self):
+        if self.data is None:
+            raise RuntimeError("no data")
+
+        m = hashlib.sha3_256()
+        m.update(self._data)
+
+        return struct.pack(">6sHQH32s",
+            encodeindex(HEADER_PACKET_INDEX), # packet index
+            2, # protocol version
+            len(self._data),  # file size
+            PACKET_SIZE,  # packet size
+            m.digest()  # sha3-256 of file
+        )
+
     @property
     def data(self):
         return self._data
@@ -146,18 +169,14 @@ class SendWindow(QWidget):
         self._blockCount = math.ceil(len(self._data) / BLOCK_SIZE)
         self.wProgressBar.setRange(0, self._blockCount)
 
-        m = hashlib.sha3_256()
-        m.update(self._data)
+        self.wImage.setPixmap(self.render(self.header_packet()))
 
-        header_packet = struct.pack(">6sHQH32s",
-            encodeindex(HEADER_PACKET_INDEX), # packet index
-            2, # protocol version
-            len(self._data),  # file size
-            PACKET_SIZE,  # packet size
-            m.digest()  # sha3-256 of file
-        )
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
 
-        self.wImage.setPixmap(packet_image(header_packet))
+        if self.data is not None and self._next_qr is None:
+            # Not running; redraw header packet
+            self.wImage.setPixmap(self.render(self.header_packet()))
 
     def startTransfer(self):
         if self._data is None:
@@ -175,10 +194,19 @@ class SendWindow(QWidget):
         block = self._data[beginChar:endChar]
         packet = encodeindex(self._nextBlock) + block
 
-        return packet_image(packet)
+        return self.render(packet)
 
     def _showNextBlock(self):
-        self.wImage.setPixmap(self._next_qr)
+        # Symbol is already this size, unless the window size has changed.
+        self.wImage.setPixmap(
+            self._next_qr.scaled(
+                self.max_symbol_size(),
+                self.max_symbol_size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.FastTransformation
+            )
+        )
+
         self.wProgressBar.setValue(self._nextBlock + 1)
         self.wBlockCount.setText(f"{self._nextBlock+1}/{self._blockCount}")
 

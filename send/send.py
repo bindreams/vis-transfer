@@ -18,14 +18,17 @@ from PySide6.QtWidgets import (
 )
 import pyzint
 
+
 def datamatrix(data, /, *, version):
     bmp_string = pyzint.Barcode.DATAMATRIX(data, option_2=version).render_bmp()
     return Image.open(io.BytesIO(bmp_string), formats=("BMP",)).convert("L")
+
 
 LAYER_SIZE = 690
 PACKET_SIZE = LAYER_SIZE * 3
 BLOCK_SIZE = PACKET_SIZE - 6  # -6 for the block index at the beginning
 HEADER_PACKET_INDEX = 0xFFFFFFFFFFFF  # max uint48
+
 
 def packet_image(data, scale=5):
     #print("data:", repr(data))
@@ -47,8 +50,10 @@ def packet_image(data, scale=5):
     result = result.resize((result.width * scale, result.height * scale), Image.Resampling.NEAREST)
     return QPixmap(ImageQt(result))
 
+
 def encodeindex(index):
     return struct.pack(">Q", index)[2:]
+
 
 class SendWindow(QWidget):
     def __init__(self):
@@ -124,6 +129,14 @@ class SendWindow(QWidget):
         self._timer.setInterval(math.ceil(value * 1000))
 
     @property
+    def rate(self):
+        return 1 / self.delay
+
+    @rate.setter
+    def rate(self, value):
+        self.delay = 1 / value
+
+    @property
     def data(self):
         return self._data
 
@@ -177,7 +190,6 @@ class SendWindow(QWidget):
         self._next_qr = self.getNextQrCode()
 
 
-
 def main():
     app = QApplication([])
     w = SendWindow()
@@ -186,7 +198,7 @@ def main():
     with open(path, "rb") as f:
         data = f.read()
     w.data = data
-    w.delay = 1/15
+    w.rate = 15
 
     w.showMaximized()
     return app.exec()

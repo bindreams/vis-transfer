@@ -4,6 +4,7 @@
 /// For full terms see https://github.com/andreasxp/vis-transfer/blob/master/LICENSE.md.
 #pragma once
 #include <array>
+#include <cassert>
 #include <concepts>
 #include <expected>
 #include <opencv2/opencv.hpp>
@@ -29,6 +30,8 @@ std::expected<std::vector<uint8_t>, std::pair<int, DecodeError>> read_ddm(const 
 		auto& symbols = *decode_result;
 
 		if (symbols.size() > 1) return unexpected{pair{i, DecodeError{"more than one symbol detected"}}};
+		assert(symbols.size() > 0 && "at least one symbol on success");
+
 		auto& layer = symbols[0];
 
 		// Write index, which is spliced across all frames

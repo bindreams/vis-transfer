@@ -6,6 +6,12 @@ add_executable(application ${sources})
 set_target_properties(application PROPERTIES OUTPUT_NAME "vis-recv")
 target_compile_features(application PRIVATE cxx_std_23)
 
+include(cmake/warnings.cmake)
+target_compile_warnings(application PRIVATE
+    GNU all extra error
+    MSVC 4 X
+)
+
 target_include_directories(application PRIVATE ${OpenCV_INCLUDE_DIRS})
 find_package(OpenCV CONFIG REQUIRED)
 target_link_libraries(application PRIVATE ${OpenCV_LIBS})

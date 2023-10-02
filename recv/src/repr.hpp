@@ -26,6 +26,8 @@ std::string repr(size_t indent, T&& t)
 }
 
 std::string repr(size_t indent, std::span<const uint8_t> bytes) {
+	(void)indent;
+
 	std::string result(bytes.size() * 2, '\0');
 	static constexpr const char* alphabet = "0123456789abcdef";
 

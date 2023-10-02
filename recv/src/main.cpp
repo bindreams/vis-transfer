@@ -109,7 +109,7 @@ void receive(const std::filesystem::path& input, const std::filesystem::path& ou
 	cv::Mat frame;
 	uint64_t iframe = 0;
 	StreamHeader header;
-	uint64_t nframes = stream.get(cv::CAP_PROP_FRAME_COUNT);
+	uint64_t nframes = static_cast<uint64_t>(stream.get(cv::CAP_PROP_FRAME_COUNT));
 	auto start_time = ch::steady_clock::now();
 
 	for (;; ++iframe) {
@@ -144,7 +144,7 @@ void receive(const std::filesystem::path& input, const std::filesystem::path& ou
 
 	uint64_t metadata_size = PacketIndexSize;
 	uint64_t block_size = header.packet_size - metadata_size;
-	uint64_t npackets = std::ceil(double(header.file_size) / block_size);
+	uint64_t npackets = static_cast<uint64_t>(std::ceil(double(header.file_size) / block_size));
 	uint64_t ipacket_next = 0;
 
 	if (verbosity >= 1)
@@ -195,8 +195,9 @@ void receive(const std::filesystem::path& input, const std::filesystem::path& ou
 		}
 
 		uint64_t write_index = ipacket * block_size;
-		uint16_t expected_packet_size =
-			ipacket == npackets - 1 ? (header.file_size - write_index + metadata_size) : header.packet_size;
+		uint16_t expected_packet_size = ipacket == npackets - 1
+											? static_cast<uint16_t>(header.file_size - write_index + metadata_size)
+											: header.packet_size;
 
 		if (packet->size() != expected_packet_size) {
 			throw except(
@@ -244,7 +245,7 @@ int main() {
 		return app.exit(e);
 	}
 
-	int verbosity = app.count("-v");
+	int verbosity = static_cast<int>(app.count("-v"));
 
 	try {
 		receive(input, output, verbosity);

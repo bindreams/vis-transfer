@@ -18,7 +18,7 @@ size_t read(std::span<const uint8_t> bytes, size_t index, T& value) {
 	if (index + ByteSize > bytes.size()) throw std::runtime_error("end of data reached");
 
 	value = 0;
-	for (int i = index; i < index + ByteSize; ++i) {
+	for (size_t i = index; i < index + ByteSize; ++i) {
 		if constexpr (ByteSize > 1) value <<= 8;
 		value += bytes[i];
 	}

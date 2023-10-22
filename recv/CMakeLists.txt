@@ -8,7 +8,7 @@ target_compile_features(application PRIVATE cxx_std_23)
 
 include(cmake/warnings.cmake)
 target_compile_warnings(application PRIVATE
-    GNU all extra error
+    GNU all extra pedantic error
     MSVC 4 X
 )
 

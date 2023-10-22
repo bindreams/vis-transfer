@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.14.0)
 include(CheckCXXCompilerFlag)
 
+# Add a compiler option, if recognized by the compiler (internal).
 function(_target_try_add_option TARGET VISIBILITY FLAG)
     check_cxx_compiler_flag("${FLAG}" FLAG_SUPPORTED)
 
@@ -9,6 +10,7 @@ function(_target_try_add_option TARGET VISIBILITY FLAG)
     endif()
 endfunction()
 
+# Add compiler warnings for a single visibility setting (internal).
 function(_target_compile_warnings_for_visibility TARGET VISIBILITY)
     # Parse arguments --------------------------------------------------------------------------------------------------
     cmake_parse_arguments(ARGS "" "" "GNU;MSVC" ${ARGN})
@@ -35,6 +37,36 @@ function(_target_compile_warnings_for_visibility TARGET VISIBILITY)
     endif()
 endfunction()
 
+#[=======================================================================[.rst:
+.. command:: target_compile_warnings
+
+  Add warning options to a target.
+
+  ::
+
+    target_compile_warnings(<target>
+        <PRIVATE|PUBLIC|INTERFACE>
+            [GNU [flags...]]
+            [MSVC [flags...]]
+        [<PRIVATE|PUBLIC|INTERFACE> ...]
+    )
+
+  The function accepts two unrelated sets of flags: one for GNU-style compiler
+  frontends, such as GCC and clang, and the other for MSVC-style compiler
+  frontends, such as MSVC itself and clang-cl.
+
+  Each flag is written the same as you would write it on the command line,
+  except without the "-W" or "/W" prefix. For example:
+    - ``-Wall`` becomes ``all``;
+    - ``-Wbool-conversions`` becomes ``bool-conversions``;
+    - ``/W4`` becomes ``4``;
+    - ``/WX`` becomes ``X``.
+  The only exception to this rule is ``-pedantic``, which is written as ``pedantic``.
+
+  Warnings that are not recognised (such as ``-Wtrampolines`` which is recognized by GCC but not by clang) are silently
+  ignored.
+
+#]=======================================================================]
 function(target_compile_warnings TARGET)
     # Parse arguments --------------------------------------------------------------------------------------------------
     cmake_parse_arguments(ARGS "" "" "INTERFACE;PUBLIC;PRIVATE" ${ARGN})

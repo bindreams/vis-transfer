@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-include(cmake/bundled-vcpkg.cmake)
+include(scripts/cmake/bundled-vcpkg.cmake)
 project(vis-transfer-recv)
 
 file(GLOB_RECURSE sources CONFIGURE_DEPENDS "src/*.cpp" "src/*.hpp")
@@ -10,7 +10,7 @@ set_target_properties(application PROPERTIES
 	MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
 )
 
-include(cmake/warnings.cmake)
+include(scripts/cmake/warnings.cmake)
 target_compile_warnings(application PRIVATE
     GNU all extra pedantic error
     MSVC 4 X

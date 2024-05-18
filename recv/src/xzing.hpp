@@ -1,46 +1,30 @@
-/// Copyright (C) 2023 Andrey Zhukov
+/// Copyright (C) 2023-2024 Anna Zhukova
 ///
 /// This file is part of the vis-transfer project, distributed under the GNU GPL version 3.
-/// For full terms see https://github.com/andreasxp/vis-transfer/blob/master/LICENSE.md.
+/// For full terms see https://github.com/bindreams/vis-transfer/blob/master/LICENSE.md
 #pragma once
 #include <ZXing/BarcodeFormat.h>
 #include <ZXing/ReadBarcode.h>
 #include "base.hpp"
 
 namespace readers::zxing {
-namespace detail {
 
-inline ZXing::ImageView ImageViewFromMat(const cv::Mat& image) {
-	using ZXing::ImageFormat;
+DecodeResult read(GrayscaleImageView const& image) {
+	using namespace ZXing;
 
-	auto format = [&] {
-		switch (image.channels()) {
-			case 1:
-				return ImageFormat::Lum;
-			case 3:
-				return ImageFormat::BGR;
-			case 4:
-				return ImageFormat::BGRX;
-			default:
-				return ImageFormat::None;
-		}
-	}();
+	ReaderOptions opts;
+	opts.setFormats(BarcodeFormat::DataMatrix);
 
-	if (image.depth() != CV_8U || format == ImageFormat::None)
-		throw std::runtime_error("cannot convert opencv image to zxing format");
+	ImageView zxing_view{
+		image.data.data(),
+		image.size[0],
+		image.size[1],
+		ImageFormat::Lum,
+		image.strides[1],
+		image.strides[0],
+	};
 
-	return {image.data, image.cols, image.rows, format};
-}
-
-}  // namespace detail
-
-DecodeResult read(const cv::Mat& image) {
-	using detail::ImageViewFromMat;
-
-	ZXing::DecodeHints hints;
-	hints.setFormats(ZXing::BarcodeFormat::DataMatrix);
-
-	auto read_result = ZXing::ReadBarcodes(ImageViewFromMat(image), hints);
+	auto read_result = ReadBarcodes(zxing_view, opts);
 	if (read_result.size() == 0) return std::unexpected{DecodeError("no symbol detected")};
 
 	std::vector<std::vector<uint8_t>> result;
@@ -51,8 +35,8 @@ DecodeResult read(const cv::Mat& image) {
 	return result;
 }
 
-DecodeResult read_blur3(cv::Mat image) {
-	cv::GaussianBlur(image, image, {3, 3}, 0);
+DecodeResult read_blur3(GrayscaleImageView const& image) {
+	// cv::GaussianBlur(image, image, {3, 3}, 0);
 	return read(image);
 }
 

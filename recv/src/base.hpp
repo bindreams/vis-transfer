@@ -1,12 +1,13 @@
-/// Copyright (C) 2023 Andrey Zhukov
+/// Copyright (C) 2023-2024 Anna Zhukova
 ///
 /// This file is part of the vis-transfer project, distributed under the GNU GPL version 3.
-/// For full terms see https://github.com/andreasxp/vis-transfer/blob/master/LICENSE.md.
+/// For full terms see https://github.com/bindreams/vis-transfer/blob/master/LICENSE.md
 #pragma once
 #include <concepts>
 #include <expected>
-#include <opencv2/opencv.hpp>
+#include <span>
 #include <stdexcept>
+#include <vector>
 
 struct VisTransferError : std::runtime_error {
 	using std::runtime_error::runtime_error;
@@ -20,10 +21,17 @@ struct ParseError : VisTransferError {
 	using VisTransferError::VisTransferError;
 };
 
-using DecodeResult = std::expected<std::vector<std::vector<uint8_t>>, DecodeError>;
+using DecodeResult = std::expected<std::vector<std::vector<std::uint8_t>>, DecodeError>;
+
+struct GrayscaleImageView {
+	std::span<std::uint8_t const> data;
+	std::array<int, 2> size;
+	// pixel-to-pixel, row-to-row, (in bytes). 0 means default.
+	std::array<int, 2> strides = {0, 0};
+};
 
 template<class F>
-concept Decoder = requires(F&& f, const cv::Mat& image) {
+concept Decoder = requires(F&& f, GrayscaleImageView const& image) {
 	{ f(image) } -> std::same_as<DecodeResult>;
 };
 
@@ -33,7 +41,7 @@ struct CompoundDecoder {
 	F1 f1;
 	F2 f2;
 
-	DecodeResult operator()(const cv::Mat& image) {
+	DecodeResult operator()(GrayscaleImageView const& image) {
 		DecodeResult r1 = f1(image);
 		if (r1) return r1;
 		return f2(image);

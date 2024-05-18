@@ -35,9 +35,4 @@ DecodeResult read(GrayscaleImageView const& image) {
 	return result;
 }
 
-DecodeResult read_blur3(GrayscaleImageView const& image) {
-	// cv::GaussianBlur(image, image, {3, 3}, 0);
-	return read(image);
-}
-
 }  // namespace readers::zxing

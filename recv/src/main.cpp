@@ -253,18 +253,25 @@ int main() {
 
 	std::filesystem::path input;
 	std::filesystem::path output;
+	bool force = false;
 	// clang-format off
 	app.add_option("input", input, "Input video recording")
 		->required()
 		->check(CLI::ExistingFile);
 	app.add_option("-o,--output", output, "Output file")
-		->required()
-		->check(CLI::NonexistentPath);
+		->required();
+	app.add_flag("-f,--force", force, "overwrite output files");
 	app.add_flag("-v,--verbose", "enable verbose output");
 	// clang-format on
 
 	try {
 		app.parse();
+
+		if (!force) {
+			auto err = CLI::NonexistentPath(output.string());
+			if (!err.empty()) throw CLI::ValidationError{err};
+		}
+
 	} catch (const CLI::ParseError& e) {
 		return app.exit(e);
 	}

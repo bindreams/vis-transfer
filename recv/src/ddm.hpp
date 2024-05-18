@@ -1,36 +1,37 @@
-/// Copyright (C) 2023 Andrey Zhukov
+/// Copyright (C) 2023-2024 Anna Zhukova
 ///
 /// This file is part of the vis-transfer project, distributed under the GNU GPL version 3.
-/// For full terms see https://github.com/andreasxp/vis-transfer/blob/master/LICENSE.md.
+/// For full terms see https://github.com/bindreams/vis-transfer/blob/master/LICENSE.md
 #pragma once
 #include <array>
-#include <cassert>
 #include <concepts>
 #include <expected>
-#include <opencv2/opencv.hpp>
 #include <ranges>
 #include <span>
 #include <string>
 #include "base.hpp"
+#include "videostream.hpp"
 
 template<Decoder F>
-std::expected<std::vector<uint8_t>, std::pair<int, DecodeError>> read_ddm(const cv::Mat& image, F&& decode) {
+std::expected<std::vector<uint8_t>, std::pair<int, DecodeError>> read_ddm(av::VideoFrame const& image, F&& decode) {
 	using namespace std;
 
-	array<cv::Mat, 3> components;
-	cv::split(image, components);
-
-	auto& [b, g, r] = components;
 	vector<uint8_t> result(6, 0);  // Allocate 6 bytes for the index
+	size_t pixel_count = image.width() * image.height();
 
 	int i = 0;
-	for (auto& component : {r, g, b}) {
-		DecodeResult decode_result = decode(component);
+	for (int ichannel = 0; ichannel < 3; ++ichannel) {
+		GrayscaleImageView view{
+			.data = span{image.data() + ichannel, pixel_count * 3 - ichannel},  // Offset so R/G/B byte is first
+			.size = {image.width(), image.height()},
+			.strides = {3, 0},  // Stride over the RGB channels
+		};
+
+		DecodeResult decode_result = decode(view);
 		if (!decode_result) return unexpected{pair{i, decode_result.error()}};
 		auto& symbols = *decode_result;
 
 		if (symbols.size() > 1) return unexpected{pair{i, DecodeError{"more than one symbol detected"}}};
-		assert(symbols.size() > 0 && "at least one symbol on success");
 
 		auto& layer = symbols[0];
 

@@ -1,10 +1,12 @@
-/// Copyright (C) 2023 Andrey Zhukov
+/// Copyright (C) 2023-2024 Anna Zhukova
 ///
 /// This file is part of the vis-transfer project, distributed under the GNU GPL version 3.
-/// For full terms see https://github.com/andreasxp/vis-transfer/blob/master/LICENSE.md.
+/// For full terms see https://github.com/bindreams/vis-transfer/blob/master/LICENSE.md
+
+#include "videostream.hpp"
+//
 #include <fmt/format.h>
 #include <iostream>
-#include <opencv2/opencv.hpp>
 #include <stdexcept>
 #include "ddm.hpp"
 #include "deps/CLI11.hpp"
@@ -105,18 +107,35 @@ void receive(const std::filesystem::path& input, const std::filesystem::path& ou
 		}
 	};
 
-	cv::VideoCapture stream(input.string());
-	cv::Mat frame;
+	VideoStream stream{input};
+	av::VideoRescaler rescaler(
+		stream.width,
+		stream.height,
+		av::PixelFormat(AVPixelFormat::AV_PIX_FMT_RGB24),
+		stream.width,
+		stream.height,
+		stream.pixel_format
+	);  // For converting to RGB
+
 	uint64_t iframe = 0;
+	auto iterframe = stream.begin();
+
+	auto read_frame = [&] {
+		auto result = rescaler.rescale(*iterframe);
+		++iterframe;
+		++iframe;
+
+		return result;
+	};
+
 	StreamHeader header;
-	uint64_t nframes = static_cast<uint64_t>(stream.get(cv::CAP_PROP_FRAME_COUNT));
+	uint64_t nframes = stream.size();
 	auto start_time = ch::steady_clock::now();
 
-	for (;; ++iframe) {
+	while (true) {
 		if (iframe >= nframes) throw except("failed to find a header: reached end of file");
 		log_progress(report::header_progress(start_time, iframe, nframes));
-
-		if (!stream.read(frame)) throw except("failed to find a header: read error");
+		av::VideoFrame frame = read_frame();
 
 		auto packet = read_ddm(frame, read);
 		if (!packet) {
@@ -164,11 +183,10 @@ void receive(const std::filesystem::path& input, const std::filesystem::path& ou
 	ScopeGuard sg([&] { std::filesystem::remove(output_temp); });
 	memfile mf(output_temp, header.file_size);
 
-	for (; iframe < nframes; ++iframe) {
+	while (iframe < nframes) {
 		if (iframe >= nframes) throw except("failed to find packet {}: reached end of file", ipacket_next);
 		log_progress(report::progress(start_time, iframe, nframes, ipacket_next, npackets));
-
-		if (!stream.read(frame)) throw except("failed to find packet {}: read error", ipacket_next);
+		av::VideoFrame frame = read_frame();
 
 		auto packet = read_ddm(frame, read);
 		if (!packet) {
@@ -220,6 +238,8 @@ void receive(const std::filesystem::path& input, const std::filesystem::path& ou
 	mf.close();
 	log_progress(report::progress(start_time, iframe, nframes, npackets, npackets));
 	std::filesystem::rename(output_temp, output);
+
+	if (verbosity == 0) fmt::print("\n");
 	fmt::print(stderr, "done\n");
 }
 
@@ -246,6 +266,7 @@ int main() {
 	}
 
 	int verbosity = static_cast<int>(app.count("-v"));
+	if (verbosity >= 2) VideoStream::set_verbose(true);
 
 	try {
 		receive(input, output, verbosity);

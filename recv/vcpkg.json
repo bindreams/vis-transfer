@@ -1,6 +1,6 @@
 {
 	"dependencies": [
-		{"name": "opencv", "features": ["cuda","cudnn","eigen","jpeg","png","ffmpeg","contrib"]},
+		"avcpp",
 		"nu-book-zxing-cpp",
 		"llfio",
 		"cryptopp",

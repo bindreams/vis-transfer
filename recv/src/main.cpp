@@ -3,16 +3,15 @@
 /// This file is part of the vis-transfer project, distributed under the GNU GPL version 3.
 /// For full terms see https://github.com/bindreams/vis-transfer/blob/master/LICENSE.md
 
-#include "videostream.hpp"
-//
 #include <fmt/format.h>
+#include <CLI/CLI.hpp>
 #include <iostream>
 #include <stdexcept>
 #include "ddm.hpp"
-#include "deps/CLI11.hpp"
 #include "header.hpp"
 #include "memfile.hpp"
 #include "util.hpp"
+#include "videostream.hpp"
 #include "xzing.hpp"
 
 namespace ch = std::chrono;
@@ -247,7 +246,7 @@ void receive(const std::filesystem::path& input, const std::filesystem::path& ou
 	fmt::print(stderr, "done\n");
 }
 
-int main() {
+int main(int argc, char** argv) {
 	CLI::App app{"Visual file transfer decoder.", "vis-recv"};
 	app.set_version_flag("-V,--version", "1.0.0");
 
@@ -265,7 +264,8 @@ int main() {
 	// clang-format on
 
 	try {
-		app.parse();
+		argv = app.ensure_utf8(argv);
+		app.parse(argc, argv);
 
 		if (!force) {
 			auto err = CLI::NonexistentPath(output.string());

@@ -16,6 +16,9 @@ target_compile_warnings(application PRIVATE
     MSVC 4 X
 )
 
+find_package(CLI11 CONFIG REQUIRED)
+target_link_libraries(application PRIVATE CLI11::CLI11)
+
 find_package(avcpp CONFIG REQUIRED)
 target_link_libraries(application PRIVATE avcpp::avcpp avcpp::FFmpeg)
 

@@ -1,5 +1,6 @@
 {
 	"dependencies": [
+		"cli11",
 		"avcpp",
 		"nu-book-zxing-cpp",
 		"llfio",

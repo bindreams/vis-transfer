@@ -1,0 +1,22 @@
+[project]
+name = "vis-transfer"
+version = "0.3.0"
+
+
+requires-python = ">=3.11"
+dependencies = [
+	"PySide6",
+	"pillow",
+	"zint-bindings >= 1.1",
+]
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = "missing-function-docstring, too-many-arguments, too-many-locals, invalid-name"
+max-line-length = 120
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+profile = "black"
+line_length = 120

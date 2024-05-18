@@ -16,7 +16,7 @@
 struct VideoStream {
 private:
 	std::filesystem::path path;
-	std::size_t stream_index;
+	int stream_index = -1;
 	av::Codec codec;
 
 	std::size_t size_ = static_cast<std::size_t>(-1);
@@ -32,7 +32,7 @@ public:
 	private:
 		av::FormatContext format_ctx;
 		av::VideoDecoderContext decoder_ctx;
-		std::size_t stream_index = static_cast<std::size_t>(-1);
+		int stream_index = -1;
 
 		av::VideoFrame current_frame = av::VideoFrame::null();
 
@@ -91,14 +91,14 @@ public:
 		// Find video stream
 		format_ctx.findStreamInfo();
 		av::Stream stream;
-		for (stream_index = 0; stream_index < format_ctx.streamsCount(); ++stream_index) {
+		for (stream_index = 0; stream_index < static_cast<int>(format_ctx.streamsCount()); ++stream_index) {
 			stream = format_ctx.stream(stream_index);
 			if (stream.mediaType() == AVMEDIA_TYPE_VIDEO) {
 				break;
 			}
 		}
 
-		if (stream_index == format_ctx.streamsCount()) {
+		if (stream_index == static_cast<int>(format_ctx.streamsCount())) {
 			throw std::runtime_error("could not find a video stream in the file");
 		}
 

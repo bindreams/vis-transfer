@@ -98,7 +98,11 @@ E except(std::format_string<Args...> fmt, Args&&... args) {
 };
 
 void receive(const std::filesystem::path& input, const std::filesystem::path& output, int verbosity) {
-	auto read = combine(readers::zxing::read, readers::zxing::read_blur3);
+	// You can use `combine()` function to chain several read methods. The `combine()` function tries all of the
+	// specified methods in order and short-circuits on the first that returns a result.
+	// Each method mush satisfy the `Decoder` concept.
+	auto read = readers::zxing::read;
+
 	auto log_progress = [verbosity](std::string_view str) {
 		if (verbosity > 0) {
 			fmt::print("{}\n", str);

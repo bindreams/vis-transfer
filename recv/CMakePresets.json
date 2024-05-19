@@ -2,12 +2,10 @@
 	"version": 3,
 	"configurePresets": [
 		{
-			"name": "clang",
+			"name": "default",
 			"binaryDir": "build",
 			"generator": "Ninja Multi-Config",
 			"cacheVariables": {
-				"CMAKE_C_COMPILER": "clang",
-				"CMAKE_CXX_COMPILER": "clang++",
 				"CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo"
 			}
 		}

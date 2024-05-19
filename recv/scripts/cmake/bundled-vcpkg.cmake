@@ -1,20 +1,13 @@
-# zint-bindings builds wheels with static linking and uses vcpkg for its dependencies.
-# If CMAKE_TOOLCHAIN_FILE is not specified, this script will clone a known correct version of vcpkg and
-# bootstrap it.
-
 set(BUNDLED_VCPKG_PATH "${CMAKE_CURRENT_SOURCE_DIR}/.vcpkg")
-set(BUNDLED_VCPKG_TOOLCHAIN "${BUNDLED_VCPKG_PATH}/scripts/buildsystems/vcpkg.cmake")
+set(BUNDLED_VCPKG_TAG "2024.03.25")
 
-#set(CMAKE_TOOLCHAIN_FILE "${BUNDLED_VCPKG_TOOLCHAIN}" CACHE STRING "Toolchain file")
-
-# If using our toolchain, clone vcpkg and run bootstrap on it
 if (NOT EXISTS "${BUNDLED_VCPKG_PATH}")
 	find_program(GIT_EXECUTABLE git REQUIRED)
 	execute_process(
 		COMMAND "${GIT_EXECUTABLE}"
 			-c advice.detachedHead=false
 			clone https://github.com/microsoft/vcpkg
-			--branch 2024.03.25
+			--branch "${BUNDLED_VCPKG_TAG}"
 			"${BUNDLED_VCPKG_PATH}"
 		COMMAND_ERROR_IS_FATAL ANY
 	)
@@ -38,4 +31,4 @@ if(WIN32)
 	set(VCPKG_TARGET_TRIPLET "${NEW_VCPKG_TARGET_TRIPLET}" CACHE STRING "" FORCE)
 endif()
 
-include(${BUNDLED_VCPKG_TOOLCHAIN})
+include("${BUNDLED_VCPKG_PATH}/scripts/buildsystems/vcpkg.cmake")

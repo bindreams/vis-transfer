@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
+
 include(scripts/cmake/bundled-vcpkg.cmake)
+enable_vcpkg(VERSION 2024.03.25)
+
 project(vis-transfer-recv)
 
 file(GLOB_RECURSE sources CONFIGURE_DEPENDS "src/*.cpp" "src/*.hpp")
@@ -34,12 +37,4 @@ target_link_libraries(application PRIVATE cryptopp::cryptopp)
 find_package(fmt CONFIG REQUIRED)
 target_link_libraries(application PRIVATE fmt::fmt)
 
-# include(InstallRequiredSystemLibraries)
-# install(TARGETS application)
-# install(IMPORTED_RUNTIME_ARTIFACTS application RUNTIME_DEPENDENCY_SET application_RUNTIME_DEPENDENCY_SET)
-# set(system32_regex "^$ENV{SystemRoot}\\system32")
-# string(REPLACE "\\" "[\\/\\\\]" system32_regex "${system32_regex}")
-# install(RUNTIME_DEPENDENCY_SET application_RUNTIME_DEPENDENCY_SET
-# 	PRE_EXCLUDE_REGEXES "api-ms-.*"
-# 	POST_EXCLUDE_REGEXES "${system32_regex}"
-# )
+install(TARGETS application)

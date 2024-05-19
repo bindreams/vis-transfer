@@ -55,7 +55,7 @@ def ddm_stream(fd: BinaryIO, /, *, symbol_size: int):
         yield dense_datamatrix(packet, symbol_size=symbol_size)
 
 
-def ddm_stream_header(fd: BinaryIO, /, *, symbol_size: int):
+def ddm_stream_header(fd: BinaryIO, /, *, symbol_size: int) -> Image:
     """Given a seekable stream, produce a header dense datamatrix."""
     packet_size = dminfo[symbol_size].eci_bytes * 3
     packet = packet_stream_header(fd, packet_size=packet_size)

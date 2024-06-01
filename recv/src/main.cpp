@@ -7,9 +7,11 @@
 #include <CLI/CLI.hpp>
 #include <iostream>
 #include <stdexcept>
+#include <thread>
 #include "ddm.hpp"
 #include "header.hpp"
 #include "memfile.hpp"
+#include "queue.hpp"
 #include "util.hpp"
 #include "videostream.hpp"
 #include "xzing.hpp"
@@ -97,6 +99,8 @@ E except(std::format_string<Args...> fmt, Args&&... args) {
 };
 
 void receive(const std::filesystem::path& input, const std::filesystem::path& output, int verbosity) {
+	auto start_time = ch::steady_clock::now();
+
 	// You can use `combine()` function to chain several read methods. The `combine()` function tries all of the
 	// specified methods in order and short-circuits on the first that returns a result.
 	// Each method mush satisfy the `Decoder` concept.
@@ -110,31 +114,44 @@ void receive(const std::filesystem::path& input, const std::filesystem::path& ou
 		}
 	};
 
+	// Video reader thread ---------------------------------------------------------------------------------------------
 	VideoStream stream{input};
-	av::VideoRescaler rescaler(
-		stream.width,
-		stream.height,
-		av::PixelFormat(AVPixelFormat::AV_PIX_FMT_RGB24),
-		stream.width,
-		stream.height,
-		stream.pixel_format
-	);  // For converting to RGB
-
 	uint64_t iframe = 0;
-	auto iterframe = stream.begin();
+	uint64_t nframes = stream.size();
+
+	Queue<av::VideoFrame> frames(1);
+	std::jthread reader_thread([&](std::stop_token stop_token) {
+		av::VideoRescaler rescaler(  // For converting to RGB
+			stream.width,
+			stream.height,
+			av::PixelFormat(AVPixelFormat::AV_PIX_FMT_RGB24),
+			stream.width,
+			stream.height,
+			stream.pixel_format
+		);
+
+		for (auto&& frame : stream) {
+			if (stop_token.stop_requested()) break;
+			frames.push(rescaler.rescale(frame));
+		}
+	});
+
+	ScopeGuard join_reader_thread([&] {
+		reader_thread.request_stop();
+		if (frames.unsafe_size() > 0) frames.pop();  // in case the reader thread is waiting on the queue
+	});
 
 	auto read_frame = [&] {
-		auto result = rescaler.rescale(*iterframe);
-		++iterframe;
+		if (iframe >= nframes) throw std::logic_error("read_frame: reading beyond end of file");
+
+		auto result = frames.pop();
 		++iframe;
 
 		return result;
 	};
 
+	// Decode process --------------------------------------------------------------------------------------------------
 	StreamHeader header;
-	uint64_t nframes = stream.size();
-	auto start_time = ch::steady_clock::now();
-
 	while (true) {
 		if (iframe >= nframes) throw except("failed to find a header: reached end of file");
 		log_progress(report::header_progress(start_time, iframe, nframes));
@@ -183,7 +200,7 @@ void receive(const std::filesystem::path& input, const std::filesystem::path& ou
 
 	std::filesystem::path output_temp = output;
 	output_temp += ".vis-transfer-incomplete";
-	ScopeGuard sg([&] { std::filesystem::remove(output_temp); });
+	ScopeGuard remove_output_temp([&] { std::filesystem::remove(output_temp); });
 	memfile mf(output_temp, header.file_size);
 
 	while (iframe < nframes) {

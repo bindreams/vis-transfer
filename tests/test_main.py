@@ -7,8 +7,6 @@ thisdir = Path(__file__).parent
 datadir = thisdir / "data"
 tempdir = thisdir / ".temp"
 
-data_files = list(datadir.glob("*"))
-
 def decode(path, output_path):
     exe = "recv/dist/bin/vis-recv"
     if platform.system() == "Windows":
@@ -38,7 +36,37 @@ def compare(fd1, fd2):
 
     return None
 
-@pytest.mark.parametrize("path", data_files)
+
+def assert_file_equivalence(reference_path, actual_path, msg=None):
+    with open(reference_path, "rb") as fd1, open(actual_path, "rb") as fd2:
+        result = compare(fd1, fd2)
+        if result is not None:
+            pos, b1, b2 = result
+
+            b1 = hex(b1) if b1 is not None else "<eof>"
+            b2 = hex(b2) if b2 is not None else "<eof>"
+
+            if msg != "":
+                msg += " "
+            pytest.fail(
+                f"{msg}Files diverged on byte {pos}:\n"
+                f"  reference: {b1}\n"
+                f"     actual: {b2}"
+            )
+
+
+
+@pytest.mark.parametrize("path", (datadir / "encoded").glob("*"))
+def test_decode(path):
+    video_path = next(path.glob("input.*"))
+    decoded_path = tempdir / f"decoded-{path.name}"
+    reference_path = next(path.glob("output.*"))
+
+    decode(video_path, decoded_path)
+    assert_file_equivalence(reference_path, decoded_path, msg=f"{path.name} was decoded incorrectly.")
+
+
+@pytest.mark.parametrize("path", (datadir / "roundtrip").glob("*"))
 def test_roundrip(path):
     from vis_transfer.testing import generate_video
     tempdir.mkdir(exist_ok=True)
@@ -50,16 +78,4 @@ def test_roundrip(path):
         generate_video(fd, output_path=video_path)
 
     decode(video_path, decoded_path)
-
-    with open(path, "rb") as fd1, open(decoded_path, "rb") as fd2:
-        result = compare(fd1, fd2)
-        if result is not None:
-            pos, b1, b2 = result
-
-            b1 = hex(b1) if b1 is not None else "<eof>"
-            b2 = hex(b2) if b2 is not None else "<eof>"
-            pytest.fail(
-                f"Roundtrip for {path.name} has failed. Files diverged on byte {pos}:\n"
-                f"  original: {b1}\n"
-                f"   decoded: {b2}"
-            )
+    assert_file_equivalence(path, decoded_path, f"Roundtrip for {path.name} has failed.")

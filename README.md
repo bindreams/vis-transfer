@@ -4,7 +4,8 @@
 
 This repository is a proof-of-concept method of transferring files in and out of secure systems and networks by displaying them as a series of QR codes, which can then be recorded and decoded on another computer.
 
-For usage, see the respective README files in `send` and `recv` directories.
+- [Send Files](/send/README.md)
+- [Receive Files](/send/README.md)
 
 ## License
 <img align="right" src="https://www.gnu.org/graphics/gplv3-with-text-136x68.png">
